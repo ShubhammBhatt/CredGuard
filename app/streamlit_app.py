@@ -59,6 +59,9 @@ st.set_page_config(
 if "form_values" not in st.session_state:
     st.session_state.form_values = PRESETS["High-Risk Foreign Electronics"].copy()
 
+if "latest_result" not in st.session_state:
+    st.session_state.latest_result = None
+
 
 def apply_preset(preset_name: str) -> None:
     """Populate session_state from a sample scenario and sync widget keys."""
@@ -213,31 +216,34 @@ with left_col:
             try:
                 res = requests.post(f"{API_BASE_URL}/predict", json=payload, timeout=10)
                 if res.status_code == 200:
-                    data = res.json()
-                    decision = data["risk_decision"]
-                    prob = float(data["fraud_probability"])
-
-                    st.markdown("### Decision Result")
-                    if decision == "Approve":
-                        st.success(
-                            f"**APPROVE** — Fraud Probability: `{prob:.4f}` (Log ID #{data['record_id']})"
-                        )
-                    elif decision == "Flag for Review":
-                        st.warning(
-                            f"**FLAG FOR REVIEW** — Fraud Probability: `{prob:.4f}` (Log ID #{data['record_id']})"
-                        )
-                    else:
-                        st.error(
-                            f"**BLOCK** — Fraud Probability: `{prob:.4f}` (Log ID #{data['record_id']})"
-                        )
-
-                    st.progress(min(max(prob, 0.0), 1.0), text=f"Fraud Risk Score: {prob:.2%}")
-                    st.json(data)
+                    st.session_state.latest_result = res.json()
                     st.rerun()
                 else:
                     st.error(f"API Error ({res.status_code}): {res.text}")
             except requests.RequestException as exc:
                 st.error(f"Failed to reach FastAPI backend: {exc}")
+
+        if st.session_state.latest_result is not None:
+            data = st.session_state.latest_result
+            decision = data["risk_decision"]
+            prob = float(data["fraud_probability"])
+
+            st.markdown("### Decision Result")
+            if decision == "Approve":
+                st.success(
+                    f"**APPROVE** — Fraud Probability: `{prob:.4f}` (Log ID #{data['record_id']})"
+                )
+            elif decision == "Flag for Review":
+                st.warning(
+                    f"**FLAG FOR REVIEW** — Fraud Probability: `{prob:.4f}` (Log ID #{data['record_id']})"
+                )
+            else:
+                st.error(
+                    f"**BLOCK** — Fraud Probability: `{prob:.4f}` (Log ID #{data['record_id']})"
+                )
+
+            st.progress(min(max(prob, 0.0), 1.0), text=f"Fraud Risk Score: {prob:.2%}")
+            st.json(data)
 
 with right_col:
     with st.container(border=True):
